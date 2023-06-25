@@ -1,0 +1,52 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>TwitterConnect</PackageId>
+    <Title>TwitterConnect</Title>
+    <Version>1.0.4</Version>
+    <Authors>Chaitanya Jonnagaddala</Authors>
+    <Company>Chaitanya</Company>
+    <Product>TwitterConnect</Product>
+    <Description>Twitter connect library checks for credentials if they are valid and helps in sending a tweet to other user's twitter handle. Twitter Connect works with Twitter API V2 and supports .net 6.</Description>
+    <Copyright>Free</Copyright>
+    <ToolCommandName>TwitterConnect</ToolCommandName>
+	<PackageReadmeFile>README.md</PackageReadmeFile>
+	<PackageIcon>logo-min.png</PackageIcon>
+	<PackageTags>twitter v2 API</PackageTags>
+	<PackageLicenseFile>License.txt</PackageLicenseFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="License.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <Content Include="License.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+	<Content Include="README.md" Pack="true" PackagePath="/bin/Release/README.md">
+	  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	</Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\GitHub\TwitterConnect\License.txt">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\..\..\GitHub\TwitterConnect\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="C:\Users\chaitanya.krishna\Desktop\logo-min.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+</Project>
