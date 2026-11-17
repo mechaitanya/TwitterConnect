@@ -2,7 +2,7 @@
 
 The authoritative rules are in [AGENTS.md](../AGENTS.md); read it before changing anything. Copilot repository instructions cannot import other files, so these are the rules that matter most, mirrored from it (`AGENTS.md` wins if they ever differ):
 
-- Never commit, push, merge, rebase, reset, clean or publish without explicit approval; never discard existing changes; never `git add .` or `git add -A`; no `Co-Authored-By` or other trailers.
+- Never commit, push, merge, rebase, reset, clean or publish without explicit approval (a NuGet publish is only ever the manual `nuget-publish.yml` workflow from `main`, after environment approval and the owner's explicit authorization); never discard existing changes; never `git add .` or `git add -A`; no `Co-Authored-By` or other trailers.
 - Targets `net11.0`, C# 15, nullable, warnings are errors; one runtime dependency (`Microsoft.Extensions.Http`); package id `XConnect.Sdk`.
 - Public API is additive only; the 2.0 types (`XClient`, `IXClient`, `XCredentials`, `XPostResult`, `XRateLimit`) must not change.
 - All JSON goes through the source-generated `XConnectJsonContext`; no reflection (Native AOT and trimming must stay clean).
