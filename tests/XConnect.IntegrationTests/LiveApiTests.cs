@@ -139,6 +139,51 @@ public sealed class LiveReadOnlyTests(ITestOutputHelper output)
         });
     }
 
+    /// <summary>
+    /// App-only user lookup. Success verifies authentication and the response mapping. HTTP 402 (an app with no credits, or a plan without access)
+    /// is a billing state, not a failure of the SDK: it must be a typed <see cref="XApiErrorKind.PaymentRequired"/> error, and the output says
+    /// "NOT VERIFIED" because no user data came back. Any other failure fails the test.
+    /// </summary>
+    [LiveFact(false, "XCONNECT_BEARER_TOKEN")]
+    public async Task AppOnly_UserLookup_SucceedsOrReportsPaymentRequired()
+    {
+        using var http = new HttpClient();
+        var client = new XConnectClient(http, new XConnectOptions().UseBearerToken(Live.Env("XCONNECT_BEARER_TOKEN")!));
+
+        var response = await client.Users.GetByUsernameAsync("XDevelopers", cancellationToken: CancellationToken.None);
+
+        output.WriteLine($"GET /2/users/by/username -> HTTP {(int)response.StatusCode}, kind {response.Error?.Kind.ToString() ?? "none"}, type {response.Error?.Type ?? "-"}.");
+        if (response.IsSuccess)
+        {
+            response.Data!.Id.Should().NotBeNullOrEmpty();
+            output.WriteLine("VERIFIED: app-only authentication and user lookup returned data.");
+            return;
+        }
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.PaymentRequired, "the only accepted failure is a billing or access state");
+        response.Error!.Kind.Should().Be(XApiErrorKind.PaymentRequired);
+        response.Error.StatusCode.Should().Be(System.Net.HttpStatusCode.PaymentRequired);
+        output.WriteLine($"NOT VERIFIED: X answered 402 (credits depleted: {response.Error.IsCreditsDepleted}); no user data was retrieved.");
+    }
+
+    /// <summary>Rate-limit headers are read from a real response, including an error response such as 402, and tracked per route.</summary>
+    [LiveFact(false, "XCONNECT_BEARER_TOKEN")]
+    public async Task AppOnly_RateLimitHeaders_AreParsedAndTracked()
+    {
+        using var http = new HttpClient();
+        var client = new XConnectClient(http, new XConnectOptions().UseBearerToken(Live.Env("XCONNECT_BEARER_TOKEN")!));
+
+        var response = await client.Users.GetByUsernameAsync("XDevelopers", cancellationToken: CancellationToken.None);
+
+        response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.Unauthorized, "the bearer token must at least authenticate");
+        response.RateLimit.Should().NotBeNull("X documents x-rate-limit-* headers on API responses");
+        response.RateLimit!.Limit.Should().BeGreaterThan(0);
+        response.RateLimit.Remaining.Should().BeInRange(0, response.RateLimit.Limit);
+        client.RateLimits.TryGet(HttpMethod.Get, "/2/users/by/username/{username}", out var tracked).Should().BeTrue();
+        tracked.Should().Be(response.RateLimit);
+        output.WriteLine($"HTTP {(int)response.StatusCode}; {response.RateLimit.Remaining}/{response.RateLimit.Limit}, resets {response.RateLimit.ResetsAt:u}.");
+    }
+
     [LiveFact(false, "XCONNECT_BEARER_TOKEN")]
     public async Task AppOnly_SearchRecent()
     {

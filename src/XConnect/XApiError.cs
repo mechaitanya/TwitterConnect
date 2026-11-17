@@ -37,6 +37,13 @@ public enum XApiErrorKind
 
     /// <summary>The request conflicts with current state (HTTP 409), for example opening a second connection to a single-connection stream.</summary>
     Conflict,
+
+    /// <summary>
+    /// The request needs a payment, credits or a plan that the account does not have (HTTP 402, or an X problem type such as
+    /// <c>credits-depleted</c>). Retrying will not help until the account is funded; <see cref="XApiError.IsCreditsDepleted"/> tells
+    /// the documented-by-observation <c>credits-depleted</c> problem apart from other 402 responses.
+    /// </summary>
+    PaymentRequired,
 }
 
 /// <summary>A structured error returned by the X API, or synthesised when a response could not be parsed.</summary>
@@ -61,6 +68,13 @@ public sealed record XApiError(
 {
     /// <summary>The most descriptive message available for this error.</summary>
     public string Message => Detail ?? Title ?? $"X API request failed with HTTP {(int)StatusCode}.";
+
+    /// <summary>
+    /// <see langword="true"/> when X reported the <c>credits-depleted</c> problem type (seen on HTTP 402 for an app with no credits). Other
+    /// <see cref="XApiErrorKind.PaymentRequired"/> errors, such as a bare 402, are not credits-depleted. The type value was observed live; X's
+    /// error documentation does not list it.
+    /// </summary>
+    public bool IsCreditsDepleted => Kind == XApiErrorKind.PaymentRequired && Type is { } t && t.EndsWith("/credits-depleted", StringComparison.Ordinal);
 
     /// <inheritdoc />
     public override string ToString() => $"{Kind} ({(int)StatusCode}): {Message}";

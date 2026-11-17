@@ -51,3 +51,7 @@ needs no change; a hand-written implementation does.
 ## Test packages (development only)
 
 The test project moved from FluentAssertions to **AwesomeAssertions**, a drop-in fork that keeps an Apache-2.0 licence (FluentAssertions 8 and later is commercially licensed).
+
+## 2.1.0 additions after the first preview
+
+- `XApiErrorKind.PaymentRequired` (appended, value 10) and `XApiError.IsCreditsDepleted`. HTTP 402 responses were `Unknown` in 2.1.0-preview.1; they are now `PaymentRequired`. Code that switched exhaustively over `XApiErrorKind` should handle the new value.

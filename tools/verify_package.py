@@ -61,6 +61,18 @@ def main():
     extra = [n for n in names if re.search(r"\.(pdb|json|cs|csproj|env|pfx|snk|key)$", n, re.I) and not n.startswith("package/")]
     if extra: errors.append(f"unexpected files in package: {extra}")
 
+    # The assembly must carry the package version and the commit (InformationalVersion "<version>+<commit>"). Building without the release
+    # version and then packing with it (dotnet pack --no-build -p:Version=...) produces a DLL that disagrees with its own package.
+    dll_bytes = z.read(dlls[0]) if len(dlls) == 1 else b""
+    if dll_bytes and ver and repo is not None and repo.get("commit"):
+        expected_info = f"{ver}+{repo.get('commit')}".encode("utf-16-le")
+        if expected_info not in dll_bytes:
+            found = re.findall(rb"(?:[0-9]\x00\.\x00)+[0-9]\x00(?:-\x00[0-9A-Za-z.\x00-]*?)?\+\x00(?:[0-9a-f]\x00){7,40}", dll_bytes)
+            actual = found[0].decode("utf-16-le") if found else "no informational version"
+            errors.append(f"assembly InformationalVersion is '{actual}' but the package is '{ver}+{repo.get('commit')}': build and pack with the same -p:Version")
+        else:
+            notes.append(f"assembly InformationalVersion {ver}+{repo.get('commit')[:7]}")
+
     readme = z.read("README.md").decode("utf-8") if "README.md" in names else ""
     links = re.findall(r"\]\(([^)\s]+)\)", readme)
     rel = [l for l in links if not l.startswith(("http://", "https://", "#", "mailto:"))]
@@ -78,7 +90,15 @@ def main():
         pdbs = [n for n in s.namelist() if n.endswith(".pdb")]
         if not pdbs: errors.append("symbol package has no .pdb")
         else:
-            blob = s.read(pdbs[0]).decode("latin-1")
+            pdb_bytes = s.read(pdbs[0])
+            rsds = dll_bytes.find(b"RSDS")
+            if rsds < 0:
+                errors.append("dll has no CodeView debug record, so the symbol package cannot be matched to it")
+            elif dll_bytes[rsds + 4:rsds + 20] not in pdb_bytes:
+                errors.append("symbol package does not match the dll: the CodeView debug id of the dll is not in the .pdb")
+            else:
+                notes.append("pdb matches the dll")
+            blob = pdb_bytes.decode("latin-1")
             m = re.search(r'\{"documents":\{[^}]*\}\}', blob)
             if not m: errors.append("pdb has no Source Link document map")
             else:

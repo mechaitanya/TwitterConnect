@@ -92,10 +92,12 @@ jobs:
             *) echo "::error::package check failed (exit $code): version already published or nuget.org unreachable"; exit 1 ;;
           esac
 
+      # The release version goes into the build itself (not only into pack), so the DLL's AssemblyVersion, FileVersion and
+      # InformationalVersion ("<version>+<commit>"), the package version and the Source Link commit all come from one build.
       - name: Restore and build (Release, warnings are errors)
         run: |
           dotnet restore XConnect.sln
-          dotnet build XConnect.sln -c Release --no-restore
+          dotnet build XConnect.sln -c Release --no-restore -p:Version="$VERSION"
 
       - name: Unit tests
         run: dotnet test tests/XConnect.Tests -c Release --no-build
