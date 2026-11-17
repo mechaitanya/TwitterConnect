@@ -1,0 +1,5 @@
+# Keep line endings identical on every platform: tests compare raw-string text and generated documents byte for byte.
+* text=auto eol=lf
+*.png binary
+*.nupkg binary
+*.snupkg binary

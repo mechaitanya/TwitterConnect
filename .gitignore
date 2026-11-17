@@ -1,3 +1,10 @@
-/bin
-/obj
-/.vs
+bin/
+obj/
+.vs/
+*.user
+*.nupkg
+TestResults/
+*.snupkg
+artifacts/
+aot-out/
+trim-out/

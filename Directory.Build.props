@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <XConnectTfm Condition="'$(XConnectTfm)' == ''">net11.0</XConnectTfm>
+    <TargetFramework>$(XConnectTfm)</TargetFramework>
+    <LangVersion>15.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+</Project>

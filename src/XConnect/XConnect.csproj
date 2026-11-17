@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>XConnect</RootNamespace>
+    <AssemblyName>XConnect</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <PackageId>XConnect.Sdk</PackageId>
+    <Title>XConnect SDK for the X API v2</Title>
+    <Version>2.1.0</Version>
+    <Authors>Chaitanya Krishna Jonnagaddala</Authors>
+    <Product>XConnect</Product>
+    <Description>A lightweight, trimming- and Native AOT-friendly .NET SDK for the X API v2: Posts, media upload, users, engagement, Direct Messages, Lists, Spaces, search, streaming, webhooks and compliance, with OAuth 1.0a, OAuth 2.0 (PKCE) and app-only authentication. Unofficial; not affiliated with X Corp.</Description>
+    <Copyright>Copyright (c) 2023-2026 Chaitanya Krishna Jonnagaddala</Copyright>
+    <PackageTags>x;x-api;twitter;api-client;sdk;oauth;oauth2;pkce;post;media;streaming;nativeaot</PackageTags>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+    <!-- The repository URL comes from the git remote `origin` (github.com/mechaitanya/TwitterConnect, public, MIT, default branch main);
+         there is no repository named XConnect. Update both URLs together if the repository is renamed. -->
+    <PackageProjectUrl>https://github.com/mechaitanya/TwitterConnect</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/mechaitanya/TwitterConnect.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <!-- Source Link (built into the .NET SDK), embedded untracked sources, deterministic builds and a symbol package. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- No baseline: nothing has been published under this package ID yet. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" Version="11.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="XConnect.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE.txt" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
