@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using AwesomeAssertions;
 using XConnect.Authentication;
+using XConnect.Infrastructure;
 using XConnect.Models;
 using XConnect.Streaming;
 
@@ -58,6 +59,56 @@ public sealed class ErrorModelTests
         ((int)XApiErrorKind.Unknown).Should().Be(0);
         ((int)XApiErrorKind.Serialization).Should().Be(8, "new members must be appended so persisted values keep their meaning");
         ((int)XApiErrorKind.Conflict).Should().Be(9);
+        ((int)XApiErrorKind.PaymentRequired).Should().Be(10, "appended after Conflict");
+    }
+
+    [Fact]
+    public async Task CreditsDepleted_IsPaymentRequired_WithTheStatusTypeAndDetailPreserved()
+    {
+        // The shape returned by the live API on 2026-11-17 for an app with no credits.
+        var handler = new QueueHandler().Enqueue(HttpStatusCode.PaymentRequired,
+            """{"title":"Payment Required","detail":"credits depleted","type":"https://api.x.com/2/problems/credits-depleted","status":402}""");
+        var client = TestClients.Create(handler, TestClients.OAuth1Options().Also(o => o.Retry = new XRetryOptions { MaxRetries = 3 }));
+
+        var response = await client.Posts.GetAsync("1", cancellationToken: CancellationToken.None);
+
+        response.IsSuccess.Should().BeFalse();
+        response.StatusCode.Should().Be(HttpStatusCode.PaymentRequired);
+        response.Error!.Kind.Should().Be(XApiErrorKind.PaymentRequired);
+        response.Error.IsCreditsDepleted.Should().BeTrue();
+        response.Error.StatusCode.Should().Be(HttpStatusCode.PaymentRequired);
+        response.Error.Type.Should().Be("https://api.x.com/2/problems/credits-depleted");
+        response.Error.Title.Should().Be("Payment Required");
+        response.Error.Detail.Should().Be("credits depleted");
+        handler.Requests.Should().ContainSingle("a 402 will not heal by retrying");
+    }
+
+    [Theory]
+    [InlineData("""{"title":"Payment Required","detail":"Upgrade your plan"}""")]
+    [InlineData("""{"title":"Payment Required","type":"https://api.x.com/2/problems/some-other-billing-problem"}""")]
+    [InlineData("")]
+    [InlineData("<html>Payment Required</html>")]
+    public async Task OtherPaymentRequiredResponses_AreNotCreditsDepleted(string body)
+    {
+        var handler = new QueueHandler().Enqueue(HttpStatusCode.PaymentRequired, body);
+        var client = TestClients.Create(handler, TestClients.OAuth1Options());
+
+        var response = await client.Posts.GetAsync("1", cancellationToken: CancellationToken.None);
+
+        response.Error!.Kind.Should().Be(XApiErrorKind.PaymentRequired);
+        response.Error.IsCreditsDepleted.Should().BeFalse();
+        response.Error.StatusCode.Should().Be(HttpStatusCode.PaymentRequired);
+    }
+
+    [Fact]
+    public void CreditsDepletedType_IsRecognisedByType_AndOnlyThatType()
+    {
+        var error = XErrorParser.Parse(HttpStatusCode.Forbidden, """{"title":"t","detail":"d","type":"https://api.x.com/2/problems/credits-depleted"}""", null);
+
+        error.Kind.Should().Be(XApiErrorKind.PaymentRequired);
+        error.IsCreditsDepleted.Should().BeTrue();
+        XErrorParser.Parse(HttpStatusCode.Forbidden, """{"title":"t","detail":"d","type":"https://api.x.com/2/problems/client-forbidden"}""", null)
+            .IsCreditsDepleted.Should().BeFalse();
     }
 }
 

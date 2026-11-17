@@ -102,6 +102,22 @@ class VerifyPackage(unittest.TestCase):
             return re.sub(rb"raw\.githubusercontent\.com/[^/]+/[^/]+/", b"raw.githubusercontent.com/someone/else/", d) if n.endswith(".pdb") else d
         self.assertFails(self.run_case(snupkg_edit=edit), "Source Link points at")
 
+    def test_assembly_version_must_match_the_package_version(self):
+        # A DLL built as plain 2.1.0 inside a 2.1.0-preview.1 package (the original build-then-pack defect).
+        def edit(n, d):
+            if not n.endswith(".dll"): return d
+            m = re.search(rb"(?:[0-9]\x00\.\x00)+[0-9]\x00(?:-\x00[0-9A-Za-z.\x00-]*?)?\+\x00", d)
+            self.assertIsNotNone(m)
+            return d.replace(m.group(0), "9.9.9+".encode("utf-16-le"), 1)
+        self.assertFails(self.run_case(nupkg_edit=edit), "InformationalVersion")
+
+    def test_symbols_must_match_the_dll(self):
+        def edit(n, d):
+            if not n.endswith(".dll"): return d
+            i = d.find(b"RSDS")
+            return d[:i + 4] + bytes(b ^ 0xFF for b in d[i + 4:i + 20]) + d[i + 20:]
+        self.assertFails(self.run_case(nupkg_edit=edit), "does not match the dll")
+
     def test_credential_in_readme(self):
         self.assertFails(self.run_case(lambda n, d: d + b'\nsecret = "abcdefghijklmnopqrstuvwxyz123456"\n' if n == "README.md" else d), "credential")
 

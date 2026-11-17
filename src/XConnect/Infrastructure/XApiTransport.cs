@@ -395,12 +395,16 @@ internal static class XErrorParser
                 return XApiErrorKind.Conflict;
             case "not-authorized-for-resource" or "client-forbidden":
                 return XApiErrorKind.Authorization;
+            case "credits-depleted":
+                // Observed live (HTTP 402 for an app without credits); not listed in X's error documentation.
+                return XApiErrorKind.PaymentRequired;
         }
 
         var code = (int)status;
         return code switch
         {
             401 => XApiErrorKind.Authentication,
+            402 => XApiErrorKind.PaymentRequired,
             403 when detail?.Contains("duplicate", StringComparison.OrdinalIgnoreCase) == true => XApiErrorKind.DuplicatePost,
             403 => XApiErrorKind.Authorization,
             404 => XApiErrorKind.NotFound,

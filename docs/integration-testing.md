@@ -71,6 +71,8 @@ The `~/.xconnect` directory should be created with mode 700. The suite creates t
 | Read own Posts | `OAuth1_ReadOwnPosts` (account's own timeline; read-only; an empty timeline passes; a plan-related 403 is accepted but the output says "NOT VERIFIED") | OAuth 1.0a, app with at least Read | No |
 | Unauthorized (401) | `InvalidBearerToken_IsReportedAsATypedUnauthorizedError` (sends a deliberately invalid bearer; **no real credential**; expects HTTP 401 and `XApiErrorKind.Authentication`) | only `XCONNECT_LIVE=1` | No |
 | Forbidden (403) | `OtherUsersLikes_AreRefusedWithATypedClientError` (asks for another public account's liked Posts, read-only). **Assumption:** X answers 403; the test requires a typed 4xx whose kind matches the status and prints the observed status. Only an output line saying "403 mapping VERIFIED" counts as a 403 verification | OAuth 1.0a | No |
+| App-only user lookup | `AppOnly_UserLookup_SucceedsOrReportsPaymentRequired` (success is VERIFIED; HTTP 402 passes as a typed `PaymentRequired` error but the output says "NOT VERIFIED" because no data came back) | Bearer | No |
+| App-only rate-limit headers | `AppOnly_RateLimitHeaders_AreParsedAndTracked` (works on error responses such as 402 too) | Bearer | No |
 | App-only, endpoint-aware auth | `AppOnly_SearchRecent`, `EndpointAwareAuthentication_...` | Bearer (+ OAuth 1.0a) | No |
 | Stream parameter name | `SampleStream_AcceptsTheTweetFieldsParameter` (the SDK sends `tweet.fields` to Post streams, as the OpenAPI document says; a 403 for plan access passes, a 400 blaming the parameter fails) | Bearer | No (reads a few events) |
 | OAuth 2.0 PKCE | `Pkce_Step1_...` prints the URL; `Pkce_Step2_...` completes it, saves the token and calls the API | OAuth 2.0 app, a browser | No |

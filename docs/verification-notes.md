@@ -63,3 +63,23 @@ is decoded as a space (RFC 5849); an absurd `expires_in` is clamped; replay wind
 - **Assumptions to verify live:** the local limit of 10,000 media segments may exceed X's documented segment index range; APPEND is not retried after a 5xx or network error (safe, no resume); POST retries after a 429 assume X rejects before processing; compliance upload sends chunked encoding for a non-seekable stream, which some pre-signed storage URLs reject.
 
 Addressed since the review (with tests): a stream connection can no longer hang forever (`ConnectTimeout`); reconnect and retry delays are jittered; a keep-alive-only server no longer causes a tight reconnect loop; refreshes are coordinated across authenticators sharing a store; simple media uploads are bounded while reading; a chunked upload cannot finalize a stream that changed length.
+
+## First live run (2026-11-17, `XConnect.Sdk` 2.1.0-preview.1 installed from nuget.org)
+
+A scratch app (outside the repository) installed the published package and sent read-only requests with one **app-only bearer token**. Only the bearer token was available: no OAuth 1.0a user tokens, no OAuth 2.0 client. Nothing was created or deleted. The tokens were exposed during the session and should be regenerated.
+
+| Check | Result |
+| --- | --- |
+| Bearer token authenticates | **Verified (partially).** X answered HTTP 402, not 401, so the token was accepted as a credential. No data came back. |
+| Rate-limit headers | **Verified on real responses**, including error responses: `x-rate-limit-*` parsed and tracked per route (for example 299/300 on user lookup, 9999/10000 on user Posts, 449/450 on recent search). |
+| Invalid bearer token | **Verified.** HTTP 401, returned as `XApiErrorKind.Authentication`, no exception. |
+| Bearer token on a user-context endpoint | **Verified.** Rejected locally with `InvalidOperationException` before any request. |
+| User lookup (by name, ID, batch), user Posts, Post lookup, batch lookup, recent search, counts | **Unverified.** Every call returned HTTP 402. |
+| Unknown Post is a typed error | **Unverified.** The call returned 402 too, so the result says nothing about how X reports an unknown Post. |
+| Everything needing OAuth 1.0a or 2.0 user context, and all writes and media | **Not run.** |
+
+**HTTP 402 response observed:** status 402, `title` "Payment Required", `detail` "credits depleted", `type` `https://api.x.com/2/problems/credits-depleted`, with normal `x-rate-limit-*` headers. X's error documentation does not list this problem type or status, so the SDK's handling is based on this observation.
+
+**SDK handling (added after the run):** `XApiErrorKind.PaymentRequired` (appended; existing values unchanged). An HTTP 402, or the `credits-depleted` problem type, maps to it; `XApiError.IsCreditsDepleted` is true only for the `credits-depleted` type, so a bare 402 is not reported as credits-depleted. Status, type, title and detail are preserved. 402 is never retried.
+
+**Remaining dependency:** the account needs credits (or a plan with access) before any data operation can be verified live. Until then user and Post operations remain unverified, and the README disclaimer stays.
