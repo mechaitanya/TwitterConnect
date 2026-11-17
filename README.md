@@ -6,20 +6,22 @@ streams, with OAuth 1.0a, OAuth 2.0 (Authorization Code + PKCE) and app-only aut
 
 - Targets **.NET 11** and **C# 15**; nullable reference types on; warnings are errors.
 - One NuGet package. Runtime dependencies are limited to `Microsoft.Extensions.Http` (for `IHttpClientFactory`, logging and options); there is no JSON library beyond `System.Text.Json`.
-- **System.Text.Json source generation** everywhere. Trimming- and Native AOT-compatible (validated, see [Security & AOT](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/security.md#trimming-and-native-aot)).
+- **System.Text.Json source generation** everywhere. Trimming- and Native AOT-compatible (validated, see [Security & AOT](https://github.com/mechaitanya/XConnect/blob/main/docs/security.md#trimming-and-native-aot)).
 - Typed requests and responses, no raw JSON. HTTP failures come back as typed `XApiError`s; they are not thrown.
 - Endpoint-aware authentication, safe retries, per-endpoint rate-limit tracking, pagination helpers and resilient streaming.
 
 > **Coverage:** XConnect implements **132 of the 268** operations in the official OpenAPI document (v2.175): Posts, media (including
 > subtitles, metadata and analytics), users, engagement, Direct Messages, Lists, Spaces, streaming (including the Enterprise partitioned
 > streams), streaming connection management, webhook and Account Activity management, compliance, trends, communities, news and usage. It is **not** a complete mirror of the specification. The generated
-> [API coverage matrix](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/api-coverage.md) lists every operation with its status, authentication, scopes, rate-limit scope, access
-> notes and test count, and an automated test keeps it in step with the code. [The backlog](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/backlog.md) groups what is missing and why.
+> [API coverage matrix](https://github.com/mechaitanya/XConnect/blob/main/docs/api-coverage.md) lists every operation with its status, authentication, scopes, rate-limit scope, access
+> notes and test count, and an automated test keeps it in step with the code. [The backlog](https://github.com/mechaitanya/XConnect/blob/main/docs/backlog.md) groups what is missing and why.
 
 > **Unofficial.** XConnect is an independent library and is not affiliated with or endorsed by X Corp.
 
+> **Verification status (preview).** The default tests are stubbed and checked against the official OpenAPI document, and CI builds and tests the library on Linux, macOS and Windows. **No request has been made to the real X API with this SDK**: the opt-in live suite exists but has not been run. Behaviour that depends on X itself (how a duplicate Post, refresh-token rotation or a plan restriction is reported, for example) is unverified. See [verification notes](https://github.com/mechaitanya/XConnect/blob/main/docs/verification-notes.md).
+
 > **Upgrading from 2.0?** Nothing breaks: `IXClient`, `XClient`, `XCredentials`, `XPostResult` and `XRateLimit` are unchanged.
-> See [Migration](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/migration.md).
+> See [Migration](https://github.com/mechaitanya/XConnect/blob/main/docs/migration.md).
 
 ## Installation
 
@@ -91,12 +93,12 @@ error) unless noted.
 | `Compliance`, `Trends`, `Communities`, `News`, `Usage` | Compliance jobs (create, list, get, cancel, upload, download), trends (WOEID and personalised), Communities, news stories, usage and credit balances |
 | `RateLimits` | The last rate limit seen for each endpoint |
 
-Guides: [Authentication](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/authentication.md) ·
-[Publishing](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/publishing.md) · [Media](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/media.md) · [Pagination](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/pagination.md) ·
-[Error handling](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/error-handling.md) · [Rate limits & retries](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/rate-limits.md) ·
-[Streaming](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/streaming.md) · [Webhooks](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/webhooks.md) · [Security & AOT](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/security.md) · [Architecture](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/architecture.md) ·
-[API coverage](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/api-coverage.md) · [Backlog](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/backlog.md) · [Verification notes](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/verification-notes.md) ·
-[Integration testing](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/integration-testing.md) · [Advertising API](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/advertising-api.md) · [Migration](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/migration.md)
+Guides: [Authentication](https://github.com/mechaitanya/XConnect/blob/main/docs/authentication.md) ·
+[Publishing](https://github.com/mechaitanya/XConnect/blob/main/docs/publishing.md) · [Media](https://github.com/mechaitanya/XConnect/blob/main/docs/media.md) · [Pagination](https://github.com/mechaitanya/XConnect/blob/main/docs/pagination.md) ·
+[Error handling](https://github.com/mechaitanya/XConnect/blob/main/docs/error-handling.md) · [Rate limits & retries](https://github.com/mechaitanya/XConnect/blob/main/docs/rate-limits.md) ·
+[Streaming](https://github.com/mechaitanya/XConnect/blob/main/docs/streaming.md) · [Webhooks](https://github.com/mechaitanya/XConnect/blob/main/docs/webhooks.md) · [Security & AOT](https://github.com/mechaitanya/XConnect/blob/main/docs/security.md) · [Architecture](https://github.com/mechaitanya/XConnect/blob/main/docs/architecture.md) ·
+[API coverage](https://github.com/mechaitanya/XConnect/blob/main/docs/api-coverage.md) · [Backlog](https://github.com/mechaitanya/XConnect/blob/main/docs/backlog.md) · [Verification notes](https://github.com/mechaitanya/XConnect/blob/main/docs/verification-notes.md) ·
+[Integration testing](https://github.com/mechaitanya/XConnect/blob/main/docs/integration-testing.md) · [Advertising API](https://github.com/mechaitanya/XConnect/blob/main/docs/advertising-api.md) · [Migration](https://github.com/mechaitanya/XConnect/blob/main/docs/migration.md)
 
 ## Publishing with media
 
@@ -114,7 +116,7 @@ var thread = await client.Posts.CreateThreadAsync(["First post", "Second post", 
 
 ## Things worth knowing
 
-- **Posts are never retried automatically after an ambiguous failure.** If a `POST` fails with a 5xx or a network error, X may have processed it. The SDK returns or throws and leaves the decision to you. See [Rate limits & retries](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/rate-limits.md).
+- **Posts are never retried automatically after an ambiguous failure.** If a `POST` fails with a 5xx or a network error, X may have processed it. The SDK returns or throws and leaves the decision to you. See [Rate limits & retries](https://github.com/mechaitanya/XConnect/blob/main/docs/rate-limits.md).
 - **Authentication is chosen per endpoint.** Register several methods (for example app-only for search, OAuth 1.0a for posting) and each call uses one that the endpoint accepts. Calling an endpoint that none of your methods can reach throws `InvalidOperationException` before anything is sent.
 - **Nothing is requested by default.** Choose `post.fields`, `user.fields` and expansions with `XFieldSelection` and the `XPostFields`/`XUserFields` constants.
 - **Access levels matter.** Full-archive search, quote Posting, DMs, compliance and streaming depend on your X plan. X answers `403`, which surfaces as `XApiErrorKind.Authorization`.
@@ -133,12 +135,12 @@ is a Native AOT smoke test (`dotnet publish samples/AotCheck -c Release`).
 
 `tests/XConnect.IntegrationTests` is a separate, opt-in suite that talks to the real API (OAuth 1.0a, OAuth 2.0 PKCE and refresh, user lookup, Post
 create/lookup/delete, media upload and processing). Every test is skipped by default and the ones that create content need an explicit write phrase;
-see [docs/integration-testing.md](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/integration-testing.md). It has not been run for this release.
+see [docs/integration-testing.md](https://github.com/mechaitanya/XConnect/blob/main/docs/integration-testing.md). It has not been run for this release.
 
 `tools/generate_coverage.py` regenerates the coverage matrix and the contract snapshot from the official OpenAPI document. The unit tests check every request they
 send against that contract (query parameters, types, ranges, request bodies), compare the response models with the documented schemas, and fail if the code, the snapshot and
-the matrix disagree. See [verification notes](https://github.com/mechaitanya/TwitterConnect/blob/main/docs/verification-notes.md#how-conformance-is-checked).
+the matrix disagree. See [verification notes](https://github.com/mechaitanya/XConnect/blob/main/docs/verification-notes.md#how-conformance-is-checked).
 
 ## License
 
-MIT. See [LICENSE.txt](https://github.com/mechaitanya/TwitterConnect/blob/main/LICENSE.txt).
+MIT. See [LICENSE.txt](https://github.com/mechaitanya/XConnect/blob/main/LICENSE.txt).

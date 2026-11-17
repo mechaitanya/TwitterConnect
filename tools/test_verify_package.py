@@ -97,6 +97,11 @@ class VerifyPackage(unittest.TestCase):
             return re.sub(rb"/[0-9a-f]{40}/\*", b"/" + b"a" * 40 + b"/*", d) if n.endswith(".pdb") else d
         self.assertFails(self.run_case(snupkg_edit=edit), "commit differs")
 
+    def test_source_link_repository_must_match_the_nuspec_repository(self):
+        def edit(n, d):
+            return re.sub(rb"raw\.githubusercontent\.com/[^/]+/[^/]+/", b"raw.githubusercontent.com/someone/else/", d) if n.endswith(".pdb") else d
+        self.assertFails(self.run_case(snupkg_edit=edit), "Source Link points at")
+
     def test_credential_in_readme(self):
         self.assertFails(self.run_case(lambda n, d: d + b'\nsecret = "abcdefghijklmnopqrstuvwxyz123456"\n' if n == "README.md" else d), "credential")
 

@@ -17,10 +17,10 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
 
-    <!-- The repository URL comes from the git remote `origin` (github.com/mechaitanya/TwitterConnect, public, MIT, default branch main);
-         there is no repository named XConnect. Update both URLs together if the repository is renamed. -->
-    <PackageProjectUrl>https://github.com/mechaitanya/TwitterConnect</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/mechaitanya/TwitterConnect.git</RepositoryUrl>
+    <!-- The repository was renamed from TwitterConnect to XConnect (GitHub redirects the old URL). Update both URLs and the README links together
+         if it is renamed again. -->
+    <PackageProjectUrl>https://github.com/mechaitanya/XConnect</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/mechaitanya/XConnect.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
 
     <!-- Source Link (built into the .NET SDK), embedded untracked sources, deterministic builds and a symbol package. -->

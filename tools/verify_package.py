@@ -83,6 +83,10 @@ def main():
             if not m: errors.append("pdb has no Source Link document map")
             else:
                 notes.append("Source Link: " + m.group(0))
+                slug = re.search(r"raw\.githubusercontent\.com/([^/]+/[^/]+)/[0-9a-f]{40}/", m.group(0))
+                repo_slug = re.search(r"github\.com/([^/]+/[^/.]+?)(?:\.git)?/?$", repo.get("url", "")) if repo is not None else None
+                if slug and repo_slug and slug.group(1).lower() != repo_slug.group(1).lower():
+                    errors.append(f"Source Link points at {slug.group(1)} but the nuspec repository is {repo_slug.group(1)}: the local git remote 'origin' is stale (or the repository was renamed); fix the remote or build in CI")
                 commit = re.search(r"/([0-9a-f]{40})/\*", m.group(0))
                 if repo is not None and commit and commit.group(1) != repo.get("commit"): errors.append("Source Link commit differs from the nuspec commit")
                 try:
