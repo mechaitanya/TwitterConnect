@@ -54,6 +54,91 @@ public sealed class LiveReadOnlyTests(ITestOutputHelper output)
         (response.Error is not null || response.PartialErrors.Count > 0 || response.Data is null).Should().BeTrue();
     }
 
+    /// <summary>
+    /// Reads the authenticated account's own Posts. Read-only: nothing is created or changed. Needs OAuth 1.0a user credentials whose app has at least
+    /// Read permission; the account may have no Posts at all (an empty list passes). Whether X allows the timeline endpoint depends on the API plan, so
+    /// a 403 is accepted as a correctly classified outcome and is reported in the output rather than counted as a successful read.
+    /// </summary>
+    [LiveFact(false, "XCONNECT_CONSUMER_KEY", "XCONNECT_CONSUMER_SECRET", "XCONNECT_ACCESS_TOKEN", "XCONNECT_ACCESS_TOKEN_SECRET")]
+    public async Task OAuth1_ReadOwnPosts()
+    {
+        using var http = new HttpClient();
+        var client = OAuth1Client(http);
+
+        var me = await client.Users.GetMeAsync(cancellationToken: CancellationToken.None);
+        me.IsSuccess.Should().BeTrue(me.Error?.ToString());
+
+        var posts = await client.Posts.GetUserPostsAsync(me.Data!.Id!, new XPostQuery { MaxResults = 5 }, CancellationToken.None);
+
+        output.WriteLine($"GET /2/users/:id/tweets -> HTTP {(int)posts.StatusCode}, kind {posts.Error?.Kind.ToString() ?? "none"}.");
+        if (posts.IsSuccess)
+        {
+            posts.Data.Should().NotBeNull();
+            posts.Data!.Count.Should().BeLessThanOrEqualTo(5);
+            posts.Data.Should().OnlyContain(p => !string.IsNullOrEmpty(p.Id));
+            output.WriteLine($"READ OK: {posts.Data.Count} Post(s) returned for @{me.Data.Username}.");
+        }
+        else
+        {
+            posts.Error!.Kind.Should().Be(XApiErrorKind.Authorization, "the only accepted failure is a plan or permission restriction (HTTP 403)");
+            output.WriteLine("NOT VERIFIED: X refused the read (HTTP 403), so the success path was not exercised on this account.");
+        }
+    }
+
+    /// <summary>
+    /// Sends a deliberately invalid bearer token. It uses no real credential, so it needs only <c>XCONNECT_LIVE=1</c>. X documents HTTP 401 for
+    /// credentials it cannot authenticate; the SDK must return it as a typed <see cref="XApiErrorKind.Authentication"/> error, not throw.
+    /// </summary>
+    [LiveFact]
+    public async Task InvalidBearerToken_IsReportedAsATypedUnauthorizedError()
+    {
+        using var http = new HttpClient();
+        var client = new XConnectClient(http, new XConnectOptions().UseBearerToken("xconnect-deliberately-invalid-token"));
+
+        var response = await client.Posts.GetAsync("1", cancellationToken: CancellationToken.None);
+
+        output.WriteLine($"GET /2/tweets/:id with an invalid bearer token -> HTTP {(int)response.StatusCode}, kind {response.Error?.Kind.ToString() ?? "none"}.");
+        response.IsSuccess.Should().BeFalse();
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.Unauthorized);
+        response.Error.Should().NotBeNull();
+        response.Error!.Kind.Should().Be(XApiErrorKind.Authentication);
+    }
+
+    /// <summary>
+    /// Asks for another account's liked Posts, which X restricts to the authenticated user. Read-only. ASSUMPTION: X answers this with HTTP 403 (the
+    /// documentation says the ID must match the authenticated user but does not name the status), so the test does not demand 403: it requires a typed
+    /// 4xx failure whose <see cref="XApiErrorKind"/> matches the status, and the output states the observed status. Count it as a verified
+    /// 403 mapping only if the output shows HTTP 403.
+    /// </summary>
+    [LiveFact(false, "XCONNECT_CONSUMER_KEY", "XCONNECT_CONSUMER_SECRET", "XCONNECT_ACCESS_TOKEN", "XCONNECT_ACCESS_TOKEN_SECRET")]
+    public async Task OtherUsersLikes_AreRefusedWithATypedClientError()
+    {
+        using var http = new HttpClient();
+        var client = OAuth1Client(http);
+
+        var me = await client.Users.GetMeAsync(cancellationToken: CancellationToken.None);
+        me.IsSuccess.Should().BeTrue(me.Error?.ToString());
+        const string otherPublicUserId = "783214"; // a well-known public account; only its (restricted) likes are requested
+        me.Data!.Id.Should().NotBe(otherPublicUserId, "the test needs an account other than the authenticated one");
+
+        var response = await client.Posts.GetLikedPostsAsync(otherPublicUserId, new XPageQuery { MaxResults = 5 }, CancellationToken.None);
+
+        var status = (int)response.StatusCode;
+        output.WriteLine($"GET /2/users/:other/liked_tweets -> HTTP {status}, kind {response.Error?.Kind.ToString() ?? "none"}. " +
+            (status == 403 ? "403 mapping VERIFIED." : "Status was not 403: the 403 mapping was NOT exercised by this run."));
+        response.IsSuccess.Should().BeFalse("X restricts liked Posts to the authenticated user");
+        status.Should().BeInRange(400, 499);
+        response.Error.Should().NotBeNull();
+        response.Error!.Kind.Should().Be(status switch
+        {
+            401 => XApiErrorKind.Authentication,
+            403 => XApiErrorKind.Authorization,
+            404 => XApiErrorKind.NotFound,
+            429 => XApiErrorKind.RateLimited,
+            _ => XApiErrorKind.Validation,
+        });
+    }
+
     [LiveFact(false, "XCONNECT_BEARER_TOKEN")]
     public async Task AppOnly_SearchRecent()
     {
