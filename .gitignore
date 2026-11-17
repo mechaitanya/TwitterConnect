@@ -8,3 +8,6 @@ TestResults/
 artifacts/
 aot-out/
 trim-out/
+
+# Real credentials for samples/QuickStart; never commit
+appsettings.Local.json
