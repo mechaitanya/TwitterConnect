@@ -6,13 +6,13 @@ Classification: **Blocking** (do not publish until done), **Non-blocking** (publ
 ## Verdict
 
 The code, tests, package structure and documentation are in a publishable state, and the full CI workflow has passed on Ubuntu, macOS and Windows (GitHub-hosted) both on the pull request and on `main`. **One blocking item remains: no request has ever reached the real X API.**
-Recommended version: **`2.1.0-preview.1`** first, then `2.1.0` once the live suite has been run (see the end).
+Version: **`2.1.0`** (stable). `2.1.0-preview.1` was published earlier. The owner chose to release the stable version with the B4 limitation disclosed rather than fixed: no data operation has been verified against the real X API (the account returned HTTP 402 `credits-depleted`), and the README and package say so.
 
 ## Blocking
 
 | # | Issue | Evidence | What to do |
 | --- | --- | --- | --- |
-| B4 | **No data operation has been verified against the real X API.** (One partial run reached X with an app-only token; data calls returned HTTP 402 `credits-depleted`.) Everything that depends on X (duplicate-Post reporting, refresh-token rotation, `tweet.fields` on streams, webhooks, compliance upload, partition limits) is unverified. | The live suite has 19 tests (all skipped by default). A first partial live run was made with an app-only bearer token (see [verification-notes.md](verification-notes.md#first-live-run-2026-11-17-xconnectsdk-210-preview1-installed-from-nugetorg)): rate-limit parsing and the invalid-token 401 were verified; **every data call returned HTTP 402 credits-depleted**, so no user or Post data retrieval has been verified. | Run the live suite with a test account ([integration-testing.md](integration-testing.md#recommended-order-for-the-preview-release-run)). For a preview this can be disclosed instead of fixed (the package says so), but it must not be described as "validated". |
+| B4 | **No data operation has been verified against the real X API.** (One partial run reached X with an app-only token; data calls returned HTTP 402 `credits-depleted`.) Everything that depends on X (duplicate-Post reporting, refresh-token rotation, `tweet.fields` on streams, webhooks, compliance upload, partition limits) is unverified. | The live suite has 19 tests (all skipped by default). A first partial live run was made with an app-only bearer token (see [verification-notes.md](verification-notes.md#first-live-run-2026-11-17-xconnectsdk-210-preview1-installed-from-nugetorg)): rate-limit parsing and the invalid-token 401 were verified; **every data call returned HTTP 402 credits-depleted**, so no user or Post data retrieval has been verified. | Run the live suite with a funded test account ([integration-testing.md](integration-testing.md#recommended-order-for-the-preview-release-run)). **Disclosed, not fixed, for 2.1.0**: it must not be described as "validated". |
 
 ## Resolved
 
@@ -38,7 +38,7 @@ Recommended version: **`2.1.0-preview.1`** first, then `2.1.0` once the live sui
 | **Package validation** | `EnablePackageValidation` is on with no baseline, because nothing was ever published under this ID, so there is no API baseline to compare against. 2.0 API compatibility is covered by tests (`CompatibilityAndDiTests`). |
 | **Documentation** | README code compiles (all three snippets, built against the library, warnings as errors). Every relative link in README and docs resolves; external links return 200. Webhooks, backlog, verification notes, migration and integration guides are current. |
 | **Build** | Debug and Release: 0 warnings, 0 errors, warnings as errors, `latest-recommended` analyzers (macOS). |
-| **Tests** | 352 unit tests pass on the fix branch (346 at `7382b1e`); the integration project has 15 gate tests passing and 19 live tests skipped (13 and 17 at `7382b1e`; none run against X by default). Mutation checks: removing the shared refresh lock, the connect timeout, a model field or a valid query parameter makes tests fail. |
+| **Tests** | 377 unit tests pass on the hardening working tree (352 on the PR #5 branch; 346 at `7382b1e`); the integration project has 15 gate tests passing and 19 live tests skipped (13 and 17 at `7382b1e`; none run against X by default). Mutation checks: removing the shared refresh lock, the connect timeout, a model field or a valid query parameter makes tests fail. |
 | **AOT / trimming** | Native AOT publish and run pass on macOS x64 with no IL or trim warnings (the only warnings are Apple linker messages about .NET's own native libraries). A trimmed non-AOT publish also runs. The same publish and run steps also passed on Linux and Windows in CI. |
 | **Cross-platform** | **Verified on GitHub-hosted runners** (CI run on the pull request and on `main`): Ubuntu, macOS and Windows, 20 of 20 steps each (the `latest` runner images at the time; see `ci.yml`). Before that, the same commands were run locally on macOS x64 and in the official .NET 11 Linux container. Not tested: Linux arm64, Windows arm64, and other .NET servicing versions. |
 | **Live integration** | Partially run (B4): see verification-notes. Data operations unverified (402). Readiness: read-only tests run independently (`Category=Live`); writes need the exact phrase `CREATE-AND-DELETE-A-REAL-POST`; deletion is limited to Posts the test created (ledger, unit-tested); media tests need your own files; token-refresh tests need a separate `XCONNECT_LIVE_ALLOW_TOKEN_REFRESH=1`; secrets are never printed; the cleanup of every test is tabulated. |
@@ -52,14 +52,27 @@ Recommended version: **`2.1.0-preview.1`** first, then `2.1.0` once the live sui
 - **Media:** simple uploads are bounded while reading (an endless stream is rejected after about 5 MB, a seekable over-limit stream without reading it); chunked uploads read exactly the declared length per segment and refuse to finalize a stream that grew; empty streams are rejected; cancellation between segments is covered.
 - From the previous phase: no secret in `ToString`, dot-segment path IDs rejected, overflow-safe rate-limit parsing, RFC 5849 query decoding.
 
+## Production hardening for 2.1.0 (H1, H2, H4)
+
+- **H1, response size (fixed, uncommitted):** API bodies were read with `HttpCompletionOption.ResponseContentRead` plus `ReadAsStringAsync`, so `HttpClient` buffered the whole body (its own cap is 2 GB) before the SDK saw it, and stream lines came from `StreamReader.ReadLineAsync` with no limit. Now `XConnectOptions.MaxResponseBodyBytes` (16 MiB) is enforced while reading, a declared `Content-Length` over the limit is refused unread, and an oversized body throws `XResponseTooLargeException` (never truncated and parsed, not retried). `XStreamOptions.MaxLineBytes` (1 MiB) discards an oversized line as it arrives and the stream continues; the consumer gets an `XStreamEvent` with an `Errors` entry. OAuth 2.0 token responses and the legacy `XClient` use a fixed 1 MiB cap.
+- **H4, pre-signed transfers (fixed, uncommitted):** `UploadIdsAsync` and `DownloadResultsAsync` had no limit of their own (under DI `HttpClient.Timeout` is infinite). `XConnectOptions.TransferTimeout` (10 minutes) bounds an upload in total, a download until it starts, and then each read of the returned stream (a stall limit). Expiry is a `TimeoutException`; caller cancellation stays an `OperationCanceledException`. Ordinary requests keep `Timeout`. The upload no longer buffers its (unused) response body.
+- **H2, 401 recovery (investigated, not implemented):** see below.
+- **H3 (unchanged):** refresh coordination stops at the process boundary; documented limitation for 2.1.0.
+
+### H2 findings: no automatic recovery from HTTP 401
+
+- Only `OAuth2UserAuthenticator` can refresh, and only from the local expiry (with a one-minute skew). OAuth 1.0a keys and app-only Bearer tokens cannot be renewed, so a 401 there means the credentials are wrong and a replay can only fail again.
+- A 401 on an OAuth 2.0 call means the access token was revoked, changed or expired on X's side while the local clock said otherwise; a refresh may help, or may fail too (revoked grant, rotated refresh token spent by another process).
+- Replay safety: request bodies are built by a factory per attempt (`XApiRequest.Content`), so JSON bodies can be recreated, but media segments read from a caller's stream cannot be replayed. A 401 means X rejected the request before acting on it, but X does not document that for writes, and it was not verified live (every data call returned 402).
+- A forced refresh needs a guard against refresh storms (skip it when the stored token already differs from the one that failed) and runs into H3 when several processes share one rotating refresh token.
+- **Recommendation:** ship 2.1.0 without it. If added later, make it opt-in, OAuth 2.0 user context only, at most one replay, idempotent requests only (never `POST`) with replayable bodies, after live verification. Until then the 401 is returned as `XApiErrorKind.Authentication`; an application can refresh with its own `XOAuth2Client` and retry reads itself.
+
 ## Non-blocking
 
 | Issue | Note |
 | --- | --- |
 | Refresh coordination stops at the process boundary | Two processes sharing one refresh token can still race if X rotates tokens. Use one token per process or an externally locking store. |
 | No automatic recovery from a 401 | Refresh happens from the local expiry only. |
-| Pre-signed uploads and downloads have no timeout of their own | Pass a `CancellationToken` with a timeout. |
-| Non-stream response bodies are read whole; streamed lines have no maximum length | Matches X's small JSON responses and line-delimited streams. |
 | Assumptions awaiting live proof | `tweet.fields` accepted on streams; media segment limit; APPEND not retried; POST retried after 429; chunked pre-signed upload. Listed in [verification-notes.md](verification-notes.md). |
 | Package is unsigned | NuGet author signing needs a certificate. |
 | `docs/` links in the README point at `main` | They follow the default branch, not the release tag; pin to a tag after tagging if you want them frozen. |
@@ -70,10 +83,11 @@ All unimplemented API areas, with reasons, in [backlog.md](backlog.md): Activity
 
 ## Recommended version
 
-Publish **`2.1.0-preview.1`** (a pre-release, which NuGet hides from default searches) as soon as B1 and B2 are done, then **`2.1.0`** once B3 (CI green on all three systems) and B4 (live suite run) are complete. A preview is the honest label for a package whose X-dependent behaviour has never met the real API.
-`2.1.0` is the right stable number for this ID: it is the first release under `XConnect.Sdk`, the 2.0 types (`XClient`, `XCredentials`, ...) are preserved, and the API is additive. To publish a preview, pass `-p:Version=2.1.0-preview.1` to `dotnet pack` (the project file keeps `2.1.0`).
+**`2.1.0`** is the stable number for this ID: it is the first stable release under `XConnect.Sdk`, the 2.0 types (`XClient`, `XCredentials`, ...) are preserved, and the API is additive. The project file carries `2.1.0`; a preview is produced only by passing `-p:Version=2.1.0-preview.N` to `dotnet pack`. Publishing is a separate, explicitly authorized step (see below).
 
-## Preview release checklist
+## Release checklist
+
+Written for the preview and valid for the stable release too: use `2.1.0` wherever it says `2.1.0-preview.1` (no `-p:Version` override is needed for the stable package).
 
 Done: commit, push, pull request #1, CI on three operating systems, merge to `main`, repository rename and URL update (the follow-up pull request carries the URL change, the agent rules and the verifier check).
 

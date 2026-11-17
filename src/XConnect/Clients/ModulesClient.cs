@@ -133,8 +133,23 @@ internal sealed class XComplianceClient(XApiTransport transport) : IXComplianceC
         using var content = new StreamContent(ids);
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
         using var request = new HttpRequestMessage(HttpMethod.Put, uploadUrl) { Content = content };
-        using var response = await transport.SendUnauthenticatedAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var limit = transport.Options.TransferTimeout;
+        if (limit != Timeout.InfiniteTimeSpan)
+        {
+            deadline.CancelAfter(limit);
+        }
+
+        try
+        {
+            // Only the status matters, so do not buffer the (unused) response body.
+            using var response = await transport.SendUnauthenticatedAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException($"The compliance upload did not finish within {limit}.", ex);
+        }
     }
 
     public async Task<Stream> DownloadResultsAsync(Uri downloadUrl, CancellationToken cancellationToken = default)
@@ -143,12 +158,26 @@ internal sealed class XComplianceClient(XApiTransport transport) : IXComplianceC
         RequireHttps(downloadUrl);
         var request = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
         HttpResponseMessage? response = null;
+        var limit = transport.Options.TransferTimeout;
         try
         {
-            response = await transport.SendUnauthenticatedAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            return new ResponseOwningStream(stream, response, request);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (limit != Timeout.InfiniteTimeSpan)
+            {
+                deadline.CancelAfter(limit);
+            }
+
+            try
+            {
+                response = await transport.SendUnauthenticatedAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+                var stream = await response.Content.ReadAsStreamAsync(deadline.Token).ConfigureAwait(false);
+                return new ResponseOwningStream(stream, response, request, limit);
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException($"The compliance download did not start within {limit}.", ex);
+            }
         }
         catch
         {
@@ -169,7 +198,7 @@ internal sealed class XComplianceClient(XApiTransport transport) : IXComplianceC
     internal sealed record JobBody(string Type, string? Name, bool? Resumable);
 
     /// <summary>Disposes the HTTP response together with the stream, so a streaming download never leaks a connection.</summary>
-    private sealed class ResponseOwningStream(Stream inner, HttpResponseMessage response, HttpRequestMessage request) : Stream
+    private sealed class ResponseOwningStream(Stream inner, HttpResponseMessage response, HttpRequestMessage request, TimeSpan stallLimit) : Stream
     {
         public override bool CanRead => inner.CanRead;
 
@@ -187,7 +216,25 @@ internal sealed class XComplianceClient(XApiTransport transport) : IXComplianceC
 
         public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
 
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => inner.ReadAsync(buffer, cancellationToken);
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (stallLimit == Timeout.InfiniteTimeSpan)
+            {
+                return await inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            }
+
+            // A stall limit between reads, not a total limit: a large download that keeps making progress is never cut off.
+            using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            stall.CancelAfter(stallLimit);
+            try
+            {
+                return await inner.ReadAsync(buffer, stall.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException($"The compliance download stalled for {stallLimit}.", ex);
+            }
+        }
 
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 

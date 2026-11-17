@@ -58,8 +58,8 @@ is decoded as a space (RFC 5849); an absurd `expires_in` is clamped; replay wind
 
 - **Refresh across processes.** The refresh lock is per token-store instance within one process. Separate processes (or stores that merely read the same record) can still refresh concurrently, and if X rotates refresh tokens the second attempt fails.
 - **No 401 recovery.** An access token is refreshed from its local expiry only. A revoked token, or one without `expires_in`, surfaces the 401.
-- **Pre-signed transfers have no timeout** of their own (stream connection now has `ConnectTimeout`). Under DI `HttpClient.Timeout` is infinite; pass a `CancellationToken` with a timeout.
-- **Buffering.** Non-stream response bodies are read whole; streamed lines have no maximum length.
+- **Pre-signed transfers** are bounded by `XConnectOptions.TransferTimeout` (10 minutes; upload in total, download to start and then per read). Not verified against real X storage hosts.
+- **Buffering.** Non-stream response bodies are read whole into memory but bounded by `XConnectOptions.MaxResponseBodyBytes` (16 MiB); streamed lines are bounded by `XStreamOptions.MaxLineBytes` (1 MiB).
 - **Assumptions to verify live:** the local limit of 10,000 media segments may exceed X's documented segment index range; APPEND is not retried after a 5xx or network error (safe, no resume); POST retries after a 429 assume X rejects before processing; compliance upload sends chunked encoding for a non-seekable stream, which some pre-signed storage URLs reject.
 
 Addressed since the review (with tests): a stream connection can no longer hang forever (`ConnectTimeout`); reconnect and retry delays are jittered; a keep-alive-only server no longer causes a tight reconnect loop; refreshes are coordinated across authenticators sharing a store; simple media uploads are bounded while reading; a chunked upload cannot finalize a stream that changed length.

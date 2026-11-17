@@ -87,6 +87,13 @@ public sealed record XStreamOptions
     /// </summary>
     public double Jitter { get; init; } = 0.2;
 
+    /// <summary>
+    /// The largest single line, in bytes (before the terminating line feed, so the carriage return of <c>\r\n</c> counts), accepted from a stream. A longer line is discarded as it arrives (it is never buffered whole, truncated or parsed)
+    /// and the stream continues with the next line; the consumer receives an <see cref="XStreamEvent"/> whose <see cref="XStreamEvent.Errors"/> says so.
+    /// Defaults to 1 MiB, far above a Post with its expansions.
+    /// </summary>
+    public int MaxLineBytes { get; init; } = 1024 * 1024;
+
     /// <summary>Test hook: replaces the random source (a value in [0, 1)).</summary>
     internal Func<double>? RandomSource { get; init; }
 }
@@ -205,6 +212,11 @@ internal sealed class XStreamingClient(XApiTransport transport) : IXStreamingCli
             throw new ArgumentOutOfRangeException(nameof(options), "KeepAliveTimeout, ConnectTimeout and ReconnectDelay must be positive.");
         }
 
+        if (options.MaxLineBytes < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxLineBytes must be at least 1.");
+        }
+
         var failures = 0;
         while (true)
         {
@@ -220,10 +232,20 @@ internal sealed class XStreamingClient(XApiTransport transport) : IXStreamingCli
                 using (response)
                 {
                     var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    using var reader = new StreamReader(stream);
+                    var reader = new BoundedLineReader(stream, options.MaxLineBytes);
                     while (true)
                     {
                         var (status, line) = await ReadLineAsync(reader, options.KeepAliveTimeout, cancellationToken).ConfigureAwait(false);
+                        if (status == ReadStatus.Oversized)
+                        {
+                            // Skipped without buffering or parsing it; tell the consumer rather than dropping data silently.
+                            yield return new XStreamEvent
+                            {
+                                Errors = [new XProblem { Title = "Stream line too large", Detail = $"A line longer than {options.MaxLineBytes} bytes was skipped. Raise XStreamOptions.MaxLineBytes if such lines are expected." }],
+                            };
+                            continue;
+                        }
+
                         if (status != ReadStatus.Line)
                         {
                             break; // timeout or end of stream: reconnect.
@@ -247,7 +269,16 @@ internal sealed class XStreamingClient(XApiTransport transport) : IXStreamingCli
             {
                 using (response)
                 {
-                    var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                    string body;
+                    try
+                    {
+                        body = await BoundedBody.ReadStringAsync(response.Content, transport.Options.MaxResponseBodyBytes, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (XResponseTooLargeException)
+                    {
+                        body = string.Empty; // an oversized error body is ignored: the status code still classifies the failure.
+                    }
+
                     var error = XApiTransport.ToError(response, body);
                     var transient = response.StatusCode == HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500;
                     if (!transient)
@@ -296,14 +327,19 @@ internal sealed class XStreamingClient(XApiTransport transport) : IXStreamingCli
         }
     }
 
-    private static async Task<(ReadStatus Status, string? Line)> ReadLineAsync(StreamReader reader, TimeSpan timeout, CancellationToken cancellationToken)
+    private static async Task<(ReadStatus Status, string? Line)> ReadLineAsync(BoundedLineReader reader, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linked.CancelAfter(timeout);
         try
         {
-            var line = await reader.ReadLineAsync(linked.Token).ConfigureAwait(false);
-            return line is null ? (ReadStatus.Ended, null) : (ReadStatus.Line, line);
+            var (kind, line) = await reader.ReadAsync(linked.Token).ConfigureAwait(false);
+            return kind switch
+            {
+                LineKind.Line => (ReadStatus.Line, line),
+                LineKind.Oversized => (ReadStatus.Oversized, null),
+                _ => (ReadStatus.Ended, null),
+            };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -340,6 +376,7 @@ internal sealed class XStreamingClient(XApiTransport transport) : IXStreamingCli
     private enum ReadStatus
     {
         Line,
+        Oversized,
         Ended,
         TimedOut,
     }

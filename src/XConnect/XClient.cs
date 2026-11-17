@@ -48,7 +48,7 @@ public sealed class XClient(HttpClient httpClient, TimeProvider? timeProvider = 
             timestamp: _timeProvider.GetUtcNow().ToUnixTimeSeconds()));
 
         using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var body = await XConnect.Infrastructure.BoundedBody.ReadStringAsync(response.Content, 1024 * 1024, cancellationToken).ConfigureAwait(false);
         var rateLimit = ParseRateLimit(response);
 
         if (response.IsSuccessStatusCode)

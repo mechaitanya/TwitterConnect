@@ -122,14 +122,14 @@ internal sealed partial class XApiTransport
                 {
                     try
                     {
-                        response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseContentRead, timeout.Token).ConfigureAwait(false);
+                        // Headers first, then a bounded read: HttpClient would otherwise buffer an unbounded body before we could look at it.
+                        response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+                        body = await BoundedBody.ReadStringAsync(response.Content, _options.MaxResponseBodyBytes, timeout.Token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
                     {
                         throw new TimeoutException($"The request to {request.Route} timed out after {_options.Timeout}.", ex);
                     }
-
-                    body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
