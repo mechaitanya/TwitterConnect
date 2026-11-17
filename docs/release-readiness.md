@@ -84,7 +84,18 @@ Remaining, all yours:
 4. **Check the ID:** `python3 tools/check_package_id.py XConnect.Sdk 2.1.0-preview.1` (must print OK).
 5. **Pack from the clean `main`:** `dotnet pack src/XConnect -c Release -p:Version=2.1.0-preview.1 -o artifacts`
 6. **Verify (no flags; must pass):** `python3 tools/verify_package.py artifacts && python3 tools/test_verify_package.py artifacts`
-7. **Publish** the `.nupkg` (the `.snupkg` beside it goes along) with your own API key:
-   `dotnet nuget push artifacts/XConnect.Sdk.2.1.0-preview.1.nupkg --api-key <your key> --source https://api.nuget.org/v3/index.json`
+7. **Publish** with the manual workflow (needs the one-time [Trusted Publishing setup](#trusted-publishing-setup)): Actions, `nuget-publish`, Run workflow, branch `main`, version `2.1.0-preview.1`, then approve the `nuget` environment. The workflow repeats steps 4 to 6 on the exact tip of `main` and pushes only the package it verified. Running it is the publication; only do it when you have decided to publish.
+   (Manual alternative, still yours alone: `dotnet nuget push artifacts/XConnect.Sdk.2.1.0-preview.1.nupkg --api-key <your key> --source https://api.nuget.org/v3/index.json`; the `.snupkg` beside it is uploaded to the symbol server too.)
 8. **Check the result:** install the package into a scratch project and run one call; open the package page and the Source Link.
 9. **For `2.1.0`:** rerun steps 4 to 8 with `-p:Version=2.1.0` once the live results are in.
+
+## Trusted Publishing setup
+
+`.github/workflows/nuget-publish.yml` publishes through NuGet Trusted Publishing, so no long-lived API key exists. Writing the workflow published nothing, and it has not been run. Setup that only you can do:
+
+1. **nuget.org policy** (Account, Trusted Publishing): owner `mechaitanya`, repository `XConnect`, workflow file `nuget-publish.yml`, environment `nuget`, scope Push. Choose "new packages and package versions" for the first release (the id does not exist yet), then tighten it to "only new package versions".
+2. **Repository variable** `NUGET_USER` (Settings, Secrets and variables, Actions, Variables): your nuget.org **profile name** (not your email). It is not a secret.
+3. **GitHub environment `nuget`** (Settings, Environments): add yourself as a **required reviewer**, enable "Prevent self-review" only if a second reviewer exists (otherwise leave it off, or you cannot approve your own run), and restrict **deployment branches to `main`**. No secrets are needed in it.
+4. **Optional:** after the first release, set the policy to new versions only, and review who has write access, since workflow runs need write access.
+
+What the workflow enforces: manual trigger only; `main` only, and only the current tip of `main`; the version is validated as SemVer; green CI for the commit on all three systems; the package id and version are checked against nuget.org (an existing version fails); Release build with warnings as errors, unit tests and gated integration tests; `tools/verify_package.py` with no bypass flags and its own tests; nuspec id, version, repository and commit checked; the publish job runs only after the build job and the environment approval, and pushes the verified `.nupkg` without `--skip-duplicate`, so a duplicate fails instead of being skipped. The `.nupkg` and `.snupkg` are kept as a build artifact for 30 days.

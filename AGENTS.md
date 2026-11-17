@@ -90,7 +90,7 @@ Authoritative for every agent and contributor (`CLAUDE.md` and `.github/copilot-
 - Package id `XConnect.Sdk`; version lives in `src/XConnect/XConnect.csproj` (`2.1.0`); previews are produced with `-p:Version=2.1.0-preview.N`, never by editing the file for one build.
 - Before any release: `python3 tools/check_package_id.py XConnect.Sdk <version>`, pack from a clean, pushed commit (Source Link embeds the commit), then `python3 tools/verify_package.py <dir>` **without** `--allow-dirty-commit`, and `python3 tools/test_verify_package.py <dir>`. A package is not release-ready merely because `dotnet pack` succeeded.
 - Do not add a package icon that carries X or Twitter branding. Keep the single runtime dependency.
-- **Never publish to NuGet.** The owner publishes with their own API key. The release checklist is `docs/release-readiness.md`.
+- **Never publish to NuGet.** This stays the default. The only permitted route is the dedicated, manually triggered workflow `.github/workflows/nuget-publish.yml` (NuGet Trusted Publishing; no API key is stored), run from `main`, after the `nuget` environment's required approval **and** the owner's explicit authorization for that release. Creating, changing or merging the workflow does not authorize a publication; never run it, push a package by any other means, or create a release tag without that authorization. The release checklist is `docs/release-readiness.md`.
 
 ## 12. Engineering workflow and reporting
 

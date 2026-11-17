@@ -1,0 +1,167 @@
+# Manual NuGet release of XConnect.Sdk through NuGet Trusted Publishing (OIDC). There is no long-lived API key anywhere.
+#
+# Safety model:
+#   * Only `workflow_dispatch`: never on push, pull request, merge or tag.
+#   * Both jobs refuse to run unless the ref is `main`, and the build refuses a commit that is not the current tip of `main`.
+#   * The `build` job has read-only permissions and no OIDC token; it builds, tests, packs and verifies with no bypass flags.
+#   * Only the `publish` job has `id-token: write`, and it sits behind the `nuget` environment, whose required reviewer must approve it.
+#   * It pushes exactly the package that `build` verified. A version that already exists on nuget.org makes the push fail (no --skip-duplicate).
+# One-time setup (nuget.org policy, GitHub environment, repository variable): docs/release-readiness.md, "Trusted Publishing setup".
+name: nuget-publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version to publish, for example 2.1.0-preview.1 (SemVer, no build metadata)"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: nuget-publish
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  PACKAGE_ID: XConnect.Sdk
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  build:
+    name: build and verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Validate the version input
+        run: |
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "::error::'$VERSION' is not a valid SemVer version without build metadata"; exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Require the exact tip of main
+        run: |
+          git fetch --no-tags origin main
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ] || [ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_SHA is not the current tip of main; re-run the workflow from main"; exit 1
+          fi
+          test -z "$(git status --porcelain)" || { echo "::error::working tree is not clean"; exit 1; }
+
+      - name: Require green CI on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for job in ubuntu-latest macos-latest windows-latest; do
+            result=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100" \
+              --jq "[.check_runs[] | select(.name == \"$job\")] | map(.conclusion) | if length == 0 then \"missing\" elif all(. == \"success\") then \"success\" else \"not-success\" end")
+            echo "CI $job: $result"
+            [ "$result" = "success" ] || { echo "::error::CI job '$job' is not green for $GITHUB_SHA"; exit 1; }
+          done
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Package ID and version availability
+        run: |
+          set +e
+          out=$(python3 tools/check_package_id.py "$PACKAGE_ID" "$VERSION"); code=$?
+          echo "$out"
+          case $code in
+            0) ;;                                   # the id has never been published: the first release
+            2) # the id exists: acceptable only when the existing package is ours (the script prints the authors)
+               echo "$out" | grep -q "latest authors: Chaitanya Krishna Jonnagaddala" || { echo "::error::the id exists and is not ours"; exit 1; } ;;
+            *) echo "::error::package check failed (exit $code): version already published or nuget.org unreachable"; exit 1 ;;
+          esac
+
+      - name: Restore and build (Release, warnings are errors)
+        run: |
+          dotnet restore XConnect.sln
+          dotnet build XConnect.sln -c Release --no-restore
+
+      - name: Unit tests
+        run: dotnet test tests/XConnect.Tests -c Release --no-build
+
+      - name: Integration tests stay gated (no credentials, no network)
+        run: |
+          for v in $(env | grep -E '^XCONNECT_' | cut -d= -f1); do echo "::error::$v is set; live tests must never run here"; exit 1; done
+          dotnet test tests/XConnect.IntegrationTests -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack src/XConnect -c Release --no-build -p:Version="$VERSION" -o artifacts
+
+      - name: Verify the package (no bypass flags)
+        run: |
+          python3 tools/verify_package.py artifacts
+          python3 tools/test_verify_package.py artifacts
+
+      - name: Check the package and symbol package
+        run: |
+          shopt -s nullglob
+          packages=(artifacts/*.nupkg); symbols=(artifacts/*.snupkg)
+          [ "${#packages[@]}" -eq 1 ] && [ "${packages[0]}" = "artifacts/$PACKAGE_ID.$VERSION.nupkg" ] || { echo "::error::expected exactly artifacts/$PACKAGE_ID.$VERSION.nupkg"; exit 1; }
+          [ "${#symbols[@]}" -eq 1 ] && [ "${symbols[0]}" = "artifacts/$PACKAGE_ID.$VERSION.snupkg" ] || { echo "::error::expected exactly artifacts/$PACKAGE_ID.$VERSION.snupkg"; exit 1; }
+          nuspec=$(unzip -p "${packages[0]}" "$PACKAGE_ID.nuspec")
+          echo "$nuspec" | grep -q "<id>$PACKAGE_ID</id>" || { echo "::error::nuspec id mismatch"; exit 1; }
+          echo "$nuspec" | grep -q "<version>$VERSION</version>" || { echo "::error::nuspec version mismatch"; exit 1; }
+          echo "$nuspec" | grep -q "<repository type=\"git\" url=\"https://github.com/$GITHUB_REPOSITORY.git\"" || { echo "::error::nuspec repository mismatch"; exit 1; }
+          echo "$nuspec" | grep -q "commit=\"$GITHUB_SHA\"" || { echo "::error::nuspec commit is not $GITHUB_SHA"; exit 1; }
+          echo "Verified $PACKAGE_ID $VERSION at $GITHUB_SHA"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: publish to nuget.org
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: nuget            # required reviewers on this environment gate the job
+    permissions:
+      contents: read
+      id-token: write             # lets NuGet/login exchange the GitHub OIDC token for a short-lived API key
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: artifacts
+
+      - name: Get a short-lived NuGet API key (Trusted Publishing)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push the verified package
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          # No --skip-duplicate: an existing version must fail the job, never be silently ignored. No unlist or staging.
+          # nuget.org receives the .nupkg; because the .snupkg sits beside it, `dotnet nuget push` also uploads it to the symbol server.
+          dotnet nuget push "artifacts/$PACKAGE_ID.$VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
