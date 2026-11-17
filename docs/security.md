@@ -27,6 +27,8 @@ timestamps come from `TimeProvider`.
 - Requests go to `https://api.x.com/` by default. If you change `BaseAddress`, only point it at a TLS endpoint you trust (a gateway or test server).
 - Path parameters are percent-encoded, so a user-supplied ID or username cannot alter the route.
 - Streaming and chunked uploads read and write streams incrementally, so a large response cannot exhaust memory.
+- Response bodies are size-limited while they are read: `XConnectOptions.MaxResponseBodyBytes` (16 MiB) for API calls, `XStreamOptions.MaxLineBytes` (1 MiB) per stream line. An oversized body throws `XResponseTooLargeException` rather than being truncated; an oversized stream line is skipped and reported in-band.
+- Pre-signed transfers have their own time limit, `XConnectOptions.TransferTimeout` (10 minutes).
 - Pre-signed compliance upload/download URLs must be HTTPS and are sent **without** your credentials, so your tokens can never reach the storage host.
 - `docs/spec-snapshot.json` and `SpecConformanceTests` ensure the SDK never sends an endpoint an authentication method the specification does not list for it.
 

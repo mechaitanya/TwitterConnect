@@ -116,3 +116,21 @@ public sealed class XAuthenticationException : Exception
     {
     }
 }
+
+/// <summary>
+/// Thrown when a response body, or one line of a stream, is larger than the configured limit
+/// (<see cref="XConnectOptions.MaxResponseBodyBytes"/>, <see cref="Streaming.XStreamOptions.MaxLineBytes"/>). The body is never truncated and parsed:
+/// the call fails instead. It is not retried, because the same response would exceed the limit again.
+/// </summary>
+public sealed class XResponseTooLargeException : Exception
+{
+    /// <summary>Creates the exception.</summary>
+    public XResponseTooLargeException(long limitBytes, string reason)
+        : base($"{reason} (limit {limitBytes} bytes). Raise XConnectOptions.MaxResponseBodyBytes if this response is expected.")
+    {
+        LimitBytes = limitBytes;
+    }
+
+    /// <summary>The limit, in bytes, that was exceeded.</summary>
+    public long LimitBytes { get; }
+}

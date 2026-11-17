@@ -56,7 +56,8 @@ Batch lookups can succeed while reporting individual failures (for example an ID
 | `ArgumentException` (and subclasses) | The request is invalid or violates a documented limit; thrown before anything is sent |
 | `InvalidOperationException` | None of your configured authentication methods is accepted by the endpoint |
 | `HttpRequestException` | A network failure (after retries, for idempotent requests) |
-| `TimeoutException` | `XConnectOptions.Timeout` elapsed for one attempt |
+| `TimeoutException` | `XConnectOptions.Timeout` elapsed for one attempt, or `XConnectOptions.TransferTimeout` elapsed for a pre-signed compliance upload or download |
+| `XResponseTooLargeException` | A response body exceeded `XConnectOptions.MaxResponseBodyBytes` (never truncated; not retried) |
 | `OperationCanceledException` | You cancelled |
 | `XAuthenticationException` | OAuth 2.0 token missing, refresh rejected, state mismatch, authorization denied |
 | `XApiException` | Multi-step operations that cannot return a single result (media uploads, `ItemsAsync`, streaming) and `GetDataOrThrow()` |

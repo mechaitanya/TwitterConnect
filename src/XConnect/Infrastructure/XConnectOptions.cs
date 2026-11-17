@@ -15,6 +15,20 @@ public sealed class XConnectOptions
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(100);
 
     /// <summary>
+    /// The largest response body, in bytes, the client will read for an ordinary API call. The limit is enforced while reading and a larger body
+    /// throws <see cref="XResponseTooLargeException"/> (it is never truncated). Defaults to 16 MiB, far above X's JSON responses.
+    /// </summary>
+    public long MaxResponseBodyBytes { get; set; } = 16 * 1024 * 1024;
+
+    /// <summary>
+    /// The time limit for a pre-signed compliance transfer (<c>UploadIdsAsync</c>, <c>DownloadResultsAsync</c>), separate from <see cref="Timeout"/>.
+    /// An upload may take this long in total. A download has this long to start, and then this long between reads of the returned stream (a stall limit,
+    /// not a total limit). Expiry throws <see cref="TimeoutException"/>; caller cancellation throws <see cref="OperationCanceledException"/>.
+    /// Defaults to 10 minutes; <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> disables it. The clock is the system clock.
+    /// </summary>
+    public TimeSpan TransferTimeout { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
     /// The maximum number of requests in flight at once through one client, or <see langword="null"/> (the default) for no limit.
     /// X's documentation does not describe how concurrent requests share a rate limit: each response simply reports the remaining quota,
     /// so a burst of parallel calls can exhaust a window before any response says so. Set a cap if you issue many calls in parallel.
@@ -76,6 +90,16 @@ public sealed class XConnectOptions
         if (Timeout <= TimeSpan.Zero && Timeout != System.Threading.Timeout.InfiniteTimeSpan)
         {
             return "Timeout must be positive or Timeout.InfiniteTimeSpan.";
+        }
+
+        if (MaxResponseBodyBytes < 1)
+        {
+            return "MaxResponseBodyBytes must be at least 1.";
+        }
+
+        if (TransferTimeout <= TimeSpan.Zero && TransferTimeout != System.Threading.Timeout.InfiniteTimeSpan)
+        {
+            return "TransferTimeout must be positive or Timeout.InfiniteTimeSpan.";
         }
 
         if (MaxConcurrentRequests is < 1)

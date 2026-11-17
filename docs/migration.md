@@ -54,4 +54,10 @@ The test project moved from FluentAssertions to **AwesomeAssertions**, a drop-in
 
 ## 2.1.0 additions after the first preview
 
+2.1.0 is the first stable release of `XConnect.Sdk`. The first preview was 2.1.0-preview.1; the items below were added after it, and all are additive.
+
+- **Response limits:** `XConnectOptions.MaxResponseBodyBytes` (default 16 MiB) and `XStreamOptions.MaxLineBytes` (default 1 MiB), with the new `XResponseTooLargeException`. A body over the limit now throws instead of being buffered whole; an oversized stream line is skipped and reported as an `XStreamEvent` whose `Errors` entry is titled "Stream line too large". Code that handled very large responses must raise the limit.
+- **Pre-signed transfer timeout:** `XConnectOptions.TransferTimeout` (default 10 minutes) for `UploadIdsAsync` and `DownloadResultsAsync`; expiry is a `TimeoutException`.
+- **Known limitations:** no automatic recovery from HTTP 401; OAuth 2.0 refresh coordination stops at the process boundary (H3); no data operation has been verified against the real X API (see [verification-notes.md](verification-notes.md)).
+
 - `XApiErrorKind.PaymentRequired` (appended, value 10) and `XApiError.IsCreditsDepleted`. HTTP 402 responses were `Unknown` in 2.1.0-preview.1; they are now `PaymentRequired`. Code that switched exhaustively over `XApiErrorKind` should handle the new value.

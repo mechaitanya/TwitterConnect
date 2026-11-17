@@ -322,11 +322,14 @@ public sealed class XOAuth2Client
         }
     }
 
+    /// <summary>A token response is a few hundred bytes; anything near this size is not one.</summary>
+    private const int MaxTokenResponseBytes = 1024 * 1024;
+
     private async Task<XOAuth2Token> RequestTokenAsync(List<KeyValuePair<string, string>> form, XOAuth2Token? previous, CancellationToken cancellationToken)
     {
         using var request = CreateFormRequest(_options.TokenEndpoint, form);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var body = await XConnect.Infrastructure.BoundedBody.ReadStringAsync(response.Content, MaxTokenResponseBytes, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
